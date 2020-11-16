@@ -14,7 +14,7 @@ from collections import deque
 
 USAGE = """Reencode Videos
 Usage:
-    ./reencode_videos.py <parallel_encodes> <items>...
+    ./fbed.py <parallel_encodes> <items>...
 
 Guide:
     <items> can be a single files or a directories. If a directory is passed all
