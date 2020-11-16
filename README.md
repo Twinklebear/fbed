@@ -1,7 +1,8 @@
 # FBED - FFmpeg Batch Encoding Dashboard
 
 A commandline python application for monitoring the progress of video encoding with FFmpeg.
-FBED makes use of [ffmpeg-python]() and [urwid]().
+FBED makes use of [ffmpeg-python](https://github.com/kkroening/ffmpeg-python)
+and [urwid](http://urwid.org/).
 
 ## Usage
 
