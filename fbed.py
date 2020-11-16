@@ -114,6 +114,8 @@ class EncodingTask:
     def cancel(self):
         self.proc.terminate()
         self.proc.wait()
+        os.remove(self.out_filename)
+        os.remove(self.out_basename + ".log")
 
 class EncodingManager:
     def __init__(self, videos, parallel_encodes, main_widget, todo_list, active_list, completed_list):
