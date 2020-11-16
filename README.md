@@ -30,6 +30,8 @@ If your videos are lower resultion it may be able to run 2 or 3 in parallel,
 but if the encoding appears to freeze check the log files written out in `encode_output`
 for errors.
 
+![Example image of the dashboard](https://i.imgur.com/UPywbV8.png)
+
 ## Configuring FBED
 
 FBED has a few settings hard-coded in it that I found to work well for my use case.
