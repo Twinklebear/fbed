@@ -49,12 +49,14 @@ class EncodingTask:
         self.duration = datetime.timedelta(seconds=seconds, milliseconds=milliseconds)
 
         info = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
+        self.width = info["width"]
+        self.height = info["height"]
         source_bitrate = int(int(info["bit_rate"]) / 1000)
         # Pick bitrate based on resolution, 1080p (8Mbps), 720p (5Mbps), smaller (3Mbps)
         bitrate = 3000
-        if info["height"] > 720:
+        if self.height > 720:
             bitrate = 8000
-        elif info["height"] > 480:
+        elif self.height > 480:
             bitrate = 5000
         # Don't exceed the source bitrate as our target
         if bitrate > source_bitrate:
@@ -152,8 +154,9 @@ class EncodingManager:
 
             source_file_ui = urwid.Pile([
                 urwid.Text(filename),
-                urwid.Text(f"Length: {duration}"),
-                urwid.Text(f"Bitrate: {bitrate}kbits/s"),
+                urwid.Text(f"Resolution: {video_stream['width']}x{video_stream['height']}\n" +
+                    f"Length: {duration}\n" +
+                    f"Bitrate: {bitrate}kbits/s"),
                 urwid.Divider("-")
             ])
 
@@ -196,7 +199,8 @@ class EncodingManager:
             ui = [x for x in self.active_list.body if x.contents[0][0].text == k][0]
             if enc.is_complete():
                 complete.append(k)
-                ui.contents[1][0].set_text(f"Bitrate: {enc.encode_stats['bitrate']}\n" +
+                ui.contents[1][0].set_text(f"Resolution: {enc.width}x{enc.height}\n" +
+                        f"Bitrate: {enc.encode_stats['bitrate']}\n" +
                         f"FPS: {enc.encode_stats['fps']}\n" +
                         f"Speed: {enc.encode_stats['speed']}\n" +
                         f"Elapsed: {str(enc.elapsed)}")
@@ -204,7 +208,8 @@ class EncodingManager:
                 self.completed_list.body.append(ui)
                 self.active_list.body = [x for x in self.active_list.body if x.contents[0][0].text != k]
             else:
-                ui.contents[1][0].set_text(f"Bitrate: {enc.encode_stats['bitrate']}\n" +
+                ui.contents[1][0].set_text(f"Resolution: {enc.width}x{enc.height}\n" +
+                        f"Bitrate: {enc.encode_stats['bitrate']}\n" +
                         f"FPS: {enc.encode_stats['fps']}\n" +
                         f"Speed: {enc.encode_stats['speed']}\n" +
                         f"Est. Remaining: {str(enc.encode_stats['estimate_remaining'])}")
