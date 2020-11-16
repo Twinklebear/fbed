@@ -49,19 +49,24 @@ class EncodingTask:
         self.duration = datetime.timedelta(seconds=seconds, milliseconds=milliseconds)
 
         info = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
+        source_bitrate = int(int(info["bit_rate"]) / 1000)
         # Pick bitrate based on resolution, 1080p (8Mbps), 720p (5Mbps), smaller (3Mbps)
-        bitrate = "3M"
+        bitrate = 3000
         if info["height"] > 720:
-            bitrate = "8M"
+            bitrate = 8000
         elif info["height"] > 480:
-            bitrate = "5M"
+            bitrate = 5000
+        # Don't exceed the source bitrate as our target
+        if bitrate > source_bitrate:
+            bitrate = source_bitrate
+
         encoding_args = {
             # HWAccel for RPi4, may need to pick a different encoder
             # for HW accel on other systems
             "c:v": "h264_v4l2m2m",
             "num_output_buffers": 32,
             "num_capture_buffers": 16,
-            "b:v": bitrate,
+            "b:v": f"{bitrate}k",
             "c:a": "copy",
             "progress": f"pipe:{self.pipe_write}"
         }
@@ -81,6 +86,7 @@ class EncodingTask:
                 break
             l = l.strip()
             key, val = l.split("=")
+            val = val.strip()
             if key == "out_time":
                 out_time = parse_out_time(val)
                 self.encode_stats["percent_done"] = (100.0 * out_time.total_seconds()) / self.duration.total_seconds()
@@ -118,8 +124,7 @@ class EncodingTask:
         os.remove(self.out_basename + ".log")
 
 class EncodingManager:
-    def __init__(self, videos, parallel_encodes, main_widget, todo_list, active_list, completed_list):
-        self.videos = deque(videos)
+    def __init__(self, all_files, parallel_encodes, main_widget, todo_list, active_list, completed_list):
         self.parallel_encodes = parallel_encodes
         self.main_widget = main_widget
         self.todo_list = todo_list
@@ -127,8 +132,33 @@ class EncodingManager:
         self.completed_list = completed_list
         self.active_encodes = {}
 
-        for v in videos:
-            self.todo_list.body.append(urwid.Text(v))
+        self.videos = deque()
+        for filename in all_files:
+            try:
+                probe = ffmpeg.probe(filename)
+            except ffmpeg.Error as e:
+                continue
+
+            if len([s for s in probe["streams"] if s["codec_type"] == "video"]) == 0:
+                continue
+
+            duration = float(probe["format"]["duration"])
+            seconds = int(duration)
+            milliseconds = int((duration - seconds) * 1000)
+            duration = datetime.timedelta(seconds=seconds, milliseconds=milliseconds)
+
+            video_stream = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
+            bitrate = float(video_stream["bit_rate"]) / 1000
+
+            source_file_ui = urwid.Pile([
+                urwid.Text(filename),
+                urwid.Text(f"Length: {duration}"),
+                urwid.Text(f"Bitrate: {bitrate}kbits/s"),
+                urwid.Divider("-")
+            ])
+
+            self.todo_list.body.append(source_file_ui)
+            self.videos.append(filename)
 
     def monitor_encoding(self):
         # Start more encodes if we're able to 
@@ -201,7 +231,7 @@ if __name__ == "__main__":
     args = docopt.docopt(USAGE)
 
     print("Collecting input video list...")
-    videos = []
+    all_files = []
     for it in args["<items>"]:
         if os.path.isdir(it):
             for path, dirs, files in os.walk(it):
@@ -209,17 +239,9 @@ if __name__ == "__main__":
                     continue
                 for f in files:
                     filename = os.path.join(path, f)
-                    try:
-                        probe = ffmpeg.probe(filename)
-                    except ffmpeg.Error as e:
-                        #print(e.stderr.decode("utf8"))
-                        continue
-
-                    if len([s for s in probe["streams"] if s["codec_type"] == "video"]) == 0:
-                        continue
-                    videos.append(filename)
+                    all_files.append(filename)
         else:
-            videos.append(it)
+            all_files.append(it)
 
     os.makedirs(output_dir, exist_ok=True)
     parallel_encodes = 1
@@ -244,7 +266,7 @@ if __name__ == "__main__":
         ("default_text", "white", "black")
     ]
 
-    manager = EncodingManager(videos, parallel_encodes, frame, todo_list, active_list, completed_list)
+    manager = EncodingManager(all_files, parallel_encodes, frame, todo_list, active_list, completed_list)
 
     loop = urwid.MainLoop(frame,
             unhandled_input=quit_on_escape,
