@@ -35,10 +35,11 @@ def parse_out_time(out_time):
     return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds, milliseconds=milliseconds)
 
 class EncodingTask:
-    def __init__(self, filename):
-        self.out_basename = os.path.splitext(os.path.join(output_dir, os.path.basename(filename)))[0]
-        self.out_filename = self.out_basename + ".mp4"
-        self.stderr = open(self.out_basename + ".log", "w", encoding="utf8")
+    def __init__(self, filename, out_filename):
+        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
+        self.out_filename = out_filename
+        self.log_filename = os.path.splitext(self.out_filename)[0] + ".log"
+        self.stderr = open(self.log_filename, "w", encoding="utf8")
         self.pipe_read, self.pipe_write = os.pipe()
         self.pipe_read_file = os.fdopen(self.pipe_read)
 
@@ -123,7 +124,7 @@ class EncodingTask:
         self.proc.terminate()
         self.proc.wait()
         os.remove(self.out_filename)
-        os.remove(self.out_basename + ".log")
+        os.remove(self.log_filename)
 
 class EncodingManager:
     def __init__(self, all_files, parallel_encodes, main_widget, todo_list, active_list, completed_list):
@@ -135,7 +136,7 @@ class EncodingManager:
         self.active_encodes = {}
 
         self.videos = deque()
-        for filename in all_files:
+        for filename, out_filename in all_files:
             try:
                 probe = ffmpeg.probe(filename)
             except ffmpeg.Error as e:
@@ -161,19 +162,19 @@ class EncodingManager:
             ])
 
             self.todo_list.body.append(source_file_ui)
-            self.videos.append(filename)
+            self.videos.append((filename, out_filename))
 
     def monitor_encoding(self):
         # Start more encodes if we're able to 
         if len(self.videos) > 0 and len(self.active_encodes) < self.parallel_encodes:
             self.todo_list.body.pop(0)
-            v = self.videos.popleft()
-            self.active_encodes[v] = EncodingTask(v)
+            filename, out_filename = self.videos.popleft()
+            self.active_encodes[filename] = EncodingTask(filename, out_filename)
             active_encode_ui = urwid.Pile([
-                urwid.Text(v),
+                urwid.Text(filename),
                 urwid.Text(""),
                 urwid.ProgressBar("normal", "complete"),
-                urwid.Text(f"Output: {self.active_encodes[v].out_filename}"),
+                urwid.Text(f"Output: {self.active_encodes[filename].out_filename}"),
                 urwid.Divider("-")])
             self.active_list.body.append(active_encode_ui)
 
@@ -244,11 +245,12 @@ if __name__ == "__main__":
                     continue
                 for f in files:
                     filename = os.path.join(path, f)
-                    all_files.append(filename)
+                    out_filename = os.path.join(output_dir, os.path.splitext(os.path.relpath(filename, it))[0] + ".mp4")
+                    all_files.append((filename, out_filename))
         else:
-            all_files.append(it)
+            out_filename = os.path.join(output_dir, os.path.splitext(it)[0] + ".mp4")
+            all_files.append((it, out_filename))
 
-    os.makedirs(output_dir, exist_ok=True)
     parallel_encodes = 1
     if args["<parallel_encodes>"]:
         parallel_encodes = int(args["<parallel_encodes>"])
