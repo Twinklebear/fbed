@@ -169,6 +169,8 @@ class EncodingManager:
             self.videos.append((filename, out_filename))
 
     def monitor_encoding(self):
+        self.check_task_completion()
+
         # Start more encodes if we're able to 
         if len(self.videos) > 0 and len(self.active_encodes) < self.parallel_encodes:
             self.todo_list.body.pop(0)
@@ -182,11 +184,10 @@ class EncodingManager:
                 urwid.Divider("-")])
             self.active_list.body.append(active_encode_ui)
 
-        self.check_task_completion()
-
         total_fps = 0
         for k, enc in self.active_encodes.items():
-            total_fps += enc.encode_stats["fps"]
+            if "fps" in enc.encode_stats:
+                total_fps += enc.encode_stats["fps"]
         self.main_widget.footer.set_text(f"Todo: {len(self.videos)}. Total FPS: {round(total_fps, 2)}. ESC to Cancel/Quit")
 
         # Check which UI column is selected and style the title to indicate it
