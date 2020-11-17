@@ -85,10 +85,6 @@ class EncodingTask:
     def is_complete(self):
         encode_done = False
         while not encode_done and not self.encode_error:
-            status = self.proc.poll()
-            if status != None:
-                self.encode_error = True
-                break
             # TODO: Needs some non-blocking reading here in case the process dies while
             # we're trying to read progress
             l = self.pipe_read_file.readline()
@@ -122,11 +118,10 @@ class EncodingTask:
             status = self.proc.wait()
             end = datetime.datetime.now()
             self.elapsed = end - self.start
-            if not self.encode_error:
-                self.stderr.write(f"Encoding finished in {str(self.elapsed)}")
-                os.close(self.pipe_write)
-                os.close(self.pipe_read)
-                self.stderr.close()
+            self.stderr.write(f"Encoding finished in {str(self.elapsed)}")
+            os.close(self.pipe_write)
+            os.close(self.pipe_read)
+            self.stderr.close()
         return encode_done or self.encode_error
 
     def cancel(self):
