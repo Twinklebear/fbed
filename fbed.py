@@ -80,13 +80,21 @@ class EncodingTask:
         args = ffmpeg.compile(enc, overwrite_output=True)
         self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.stderr, pass_fds=[self.pipe_write])
         self.encode_stats = {}
+        self.encode_error = False
 
     def is_complete(self):
         encode_done = False
-        while True:
+        while not encode_done and not self.encode_error:
+            status = self.proc.poll()
+            if status != None:
+                self.encode_error = True
+                break
+            # TODO: Needs some non-blocking reading here in case the process dies while
+            # we're trying to read progress
             l = self.pipe_read_file.readline()
             if not l:
                 break
+
             l = l.strip()
             key, val = l.split("=")
             val = val.strip()
@@ -110,15 +118,16 @@ class EncodingTask:
         else:
             self.encode_stats["estimate_remaining"] = datetime.timedelta(minutes=0)
 
-        if encode_done:
+        if encode_done or self.encode_error:
             status = self.proc.wait()
             end = datetime.datetime.now()
             self.elapsed = end - self.start
-            os.close(self.pipe_write)
-            os.close(self.pipe_read)
-            self.stderr.write(f"Encoding finished in {str(self.elapsed)}")
-            self.stderr.close()
-        return encode_done
+            if not self.encode_error:
+                self.stderr.write(f"Encoding finished in {str(self.elapsed)}")
+                os.close(self.pipe_write)
+                os.close(self.pipe_read)
+                self.stderr.close()
+        return encode_done or self.encode_error
 
     def cancel(self):
         self.proc.terminate()
@@ -205,7 +214,10 @@ class EncodingManager:
                         f"FPS: {enc.encode_stats['fps']}\n" +
                         f"Speed: {enc.encode_stats['speed']}\n" +
                         f"Elapsed: {str(enc.elapsed)}")
-                ui.contents[2][0].set_completion(100)
+                if enc.encode_error:
+                    ui.contents[1][0].set_text(ui.contents[1][0].text + "\nEncoding Failed! Check log")
+                else:
+                    ui.contents[2][0].set_completion(100)
                 self.completed_list.body.append(ui)
                 self.active_list.body = [x for x in self.active_list.body if x.contents[0][0].text != k]
             else:
