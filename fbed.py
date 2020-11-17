@@ -67,8 +67,8 @@ class EncodingTask:
             # HWAccel for RPi4, may need to pick a different encoder
             # for HW accel on other systems
             "c:v": "h264_v4l2m2m",
-            "num_output_buffers": 32,
-            "num_capture_buffers": 16,
+            "num_output_buffers": 16,
+            "num_capture_buffers": 8,
             "b:v": f"{bitrate}k",
             "c:a": "copy",
             "progress": f"pipe:{self.pipe_write}"
