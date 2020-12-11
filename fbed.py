@@ -34,6 +34,17 @@ def parse_out_time(out_time):
     milliseconds = int((seconds_millis - seconds) * 1000)
     return datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds, milliseconds=milliseconds)
 
+def get_video_bitrate(probe):
+    info = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
+    if "bit_rate" in info:
+        return int(int(info["bit_rate"]) / 1000)
+    elif "bit_rate" in probe["format"]:
+        return int(int(probe["format"]["bit_rate"]) / 1000)
+    else:
+        print("Failed to read bitrate from ffprobe! Please include the information below in your Github issue")
+        print(probe)
+        sys.exit(1)
+
 class EncodingTask:
     def __init__(self, filename, out_filename):
         os.makedirs(os.path.dirname(out_filename), exist_ok=True)
@@ -52,7 +63,7 @@ class EncodingTask:
         info = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
         self.width = info["width"]
         self.height = info["height"]
-        source_bitrate = int(int(info["bit_rate"]) / 1000)
+        source_bitrate = get_video_bitrate(probe)
         # Pick bitrate based on resolution, 1080p (8Mbps), 720p (5Mbps), smaller (3Mbps)
         bitrate = 3000
         if self.height > 720:
@@ -155,7 +166,7 @@ class EncodingManager:
             duration = datetime.timedelta(seconds=seconds, milliseconds=milliseconds)
 
             video_stream = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
-            bitrate = float(video_stream["bit_rate"]) / 1000
+            bitrate = get_video_bitrate(probe)
 
             source_file_ui = urwid.Pile([
                 urwid.Text(filename),
