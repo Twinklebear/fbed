@@ -48,7 +48,7 @@ elif info["height"] > 480:
 ```
 
 You can also change the encoder used to select a different hardware encoder (e.g., `h264_nvenc` on Nvidia GPUs,
-`h264_qsv` on Intel GPUs, etc.) by changing the value of `c:v` in the [`encoding_args`](https://github.com/Twinklebear/fbed/blob/main/fbed.py#L58-L67)
+`h264_qsv` on Intel CPUs, etc.) by changing the value of `c:v` in the [`encoding_args`](https://github.com/Twinklebear/fbed/blob/main/fbed.py#L58-L67)
 to your desired encoder. You can also pass additional arguments to the encoder by adding them here.
 If you're on the RPi4 using `h264_v4l2m2m` I recommend leaving the `num_output_buffers` and
 `num_capture_buffers` as I've set them, which raises their values above the defaults of 16 and 4 respectively.
