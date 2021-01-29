@@ -75,12 +75,9 @@ class EncodingTask:
             bitrate = source_bitrate
 
         encoding_args = {
-            # HWAccel for RPi4, may need to pick a different encoder
-            # for HW accel on other systems
-            "c:v": "h264_v4l2m2m",
-            "num_output_buffers": 32,
-            "num_capture_buffers": 16,
+            "c:v": "h264_qsv",
             "b:v": f"{bitrate}k",
+            "preset": "medium",
             "c:a": "copy",
             "progress": f"pipe:{self.pipe_write}"
         }
