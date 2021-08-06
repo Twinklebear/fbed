@@ -8,8 +8,7 @@ import docopt
 import subprocess
 import datetime
 import re
-import asyncio
-import urwid
+import time
 from collections import deque
 
 USAGE = """Reencode Videos
@@ -78,6 +77,7 @@ class EncodingTask:
             "c:v": "h264_qsv",
             "b:v": f"{bitrate}k",
             "preset": "medium",
+            "rdo": 1,
             "c:a": "copy",
             "progress": f"pipe:{self.pipe_write}"
         }
@@ -139,12 +139,8 @@ class EncodingTask:
         os.remove(self.log_filename)
 
 class EncodingManager:
-    def __init__(self, all_files, parallel_encodes, main_widget, todo_list, active_list, completed_list):
+    def __init__(self, all_files, parallel_encodes):
         self.parallel_encodes = parallel_encodes
-        self.main_widget = main_widget
-        self.todo_list = todo_list
-        self.active_list = active_list
-        self.completed_list = completed_list
         self.active_encodes = {}
 
         self.videos = deque()
@@ -165,15 +161,6 @@ class EncodingManager:
             video_stream = [s for s in probe["streams"] if s["codec_type"] == "video"][0]
             bitrate = get_video_bitrate(probe)
 
-            source_file_ui = urwid.Pile([
-                urwid.Text(filename),
-                urwid.Text(f"Resolution: {video_stream['width']}x{video_stream['height']}\n" +
-                    f"Length: {duration}\n" +
-                    f"Bitrate: {bitrate}kbits/s"),
-                urwid.Divider("-")
-            ])
-
-            self.todo_list.body.append(source_file_ui)
             self.videos.append((filename, out_filename))
 
     def monitor_encoding(self):
@@ -181,56 +168,29 @@ class EncodingManager:
 
         # Start more encodes if we're able to 
         if len(self.videos) > 0 and len(self.active_encodes) < self.parallel_encodes:
-            self.todo_list.body.pop(0)
             filename, out_filename = self.videos.popleft()
             self.active_encodes[filename] = EncodingTask(filename, out_filename)
-            active_encode_ui = urwid.Pile([
-                urwid.Text(filename),
-                urwid.Text(""),
-                urwid.ProgressBar("normal", "complete"),
-                urwid.Text(f"Output: {self.active_encodes[filename].out_filename}"),
-                urwid.Divider("-")])
-            self.active_list.body.append(active_encode_ui)
 
         total_fps = 0
         for k, enc in self.active_encodes.items():
             if "fps" in enc.encode_stats:
                 total_fps += enc.encode_stats["fps"]
-        self.main_widget.footer.set_text(f"Todo: {len(self.videos)}. Total FPS: {round(total_fps, 2)}. ESC to Cancel/Quit")
-
-        # Check which UI column is selected and style the title to indicate it
-        columns = self.main_widget.body
-        for c in columns.contents:
-            title = c[0].title_widget
-            if c[0] == columns.focus:
-                title.set_text(("selected_column", title.text))
-            else:
-                title.set_text(("default_text", title.text))
+        print(f"Total FPS: {total_fps}")
 
     def check_task_completion(self):
         complete = []
         for k, enc in self.active_encodes.items():
-            ui = [x for x in self.active_list.body if x.contents[0][0].text == k][0]
             if enc.is_complete():
                 complete.append(k)
-                ui.contents[1][0].set_text(f"Resolution: {enc.width}x{enc.height}\n" +
-                        f"Bitrate: {enc.encode_stats['bitrate']}\n" +
-                        f"FPS: {enc.encode_stats['fps']}\n" +
-                        f"Speed: {enc.encode_stats['speed']}\n" +
-                        f"Elapsed: {str(enc.elapsed)}")
                 if enc.encode_error:
-                    ui.contents[1][0].set_text(ui.contents[1][0].text + "\nEncoding Failed! Check log")
-                else:
-                    ui.contents[2][0].set_completion(100)
-                self.completed_list.body.append(ui)
-                self.active_list.body = [x for x in self.active_list.body if x.contents[0][0].text != k]
+                    print(f"Encode {k} failed! Check log")
             else:
-                ui.contents[1][0].set_text(f"Resolution: {enc.width}x{enc.height}\n" +
-                        f"Bitrate: {enc.encode_stats['bitrate']}\n" +
-                        f"FPS: {enc.encode_stats['fps']}\n" +
-                        f"Speed: {enc.encode_stats['speed']}\n" +
-                        f"Est. Remaining: {str(enc.encode_stats['estimate_remaining'])}")
-                ui.contents[2][0].set_completion(enc.encode_stats["percent_done"])
+                print(f"Encode {k}:\n" +
+                    f"\tResolution: {enc.width}x{enc.height}\n" +
+                    f"\tBitrate: {enc.encode_stats['bitrate']}\n" +
+                    f"\tFPS: {enc.encode_stats['fps']}\n" +
+                    f"\tSpeed: {enc.encode_stats['speed']}\n" +
+                    f"\tEst. Remaining: {str(enc.encode_stats['estimate_remaining'])}")
         for k in complete:
             del self.active_encodes[k]
 
@@ -238,16 +198,8 @@ class EncodingManager:
         for k, enc in self.active_encodes.items():
             enc.cancel()
 
-manager = None
-
-def quit_on_escape(key):
-    if key == "esc":
-        manager.cancel_active_encodes()
-        raise urwid.ExitMainLoop()
-
-def monitor_encoding(loop, man):
-    man.monitor_encoding()
-    loop.set_alarm_in(0.5, monitor_encoding, user_data=man)
+    def encodes_done(self):
+        return len(self.active_encodes) == 0 and len(self.videos) == 0
 
 if __name__ == "__main__":
     args = docopt.docopt(USAGE)
@@ -271,29 +223,12 @@ if __name__ == "__main__":
     if args["<parallel_encodes>"]:
         parallel_encodes = int(args["<parallel_encodes>"])
 
-    # Setup our UI
-    todo_list = urwid.ListBox(urwid.SimpleFocusListWalker([]))
-    active_list = urwid.ListBox(urwid.SimpleFocusListWalker([]))
-    completed_list = urwid.ListBox(urwid.SimpleFocusListWalker([]))
-    columns = urwid.Columns([urwid.LineBox(todo_list, title="Todo"),
-        urwid.LineBox(active_list, title="Active"),
-        urwid.LineBox(completed_list, title="Completed")])
-    frame = urwid.Frame(columns,
-            header=urwid.Text("FFmpeg Batch Encoding Dashboard"),
-            footer=urwid.Text(""))
+    manager = EncodingManager(all_files, parallel_encodes)
 
-    palette = [
-        ("normal", "black", "light gray"),
-        ("complete", "black", "dark green"),
-        ("selected_column", "black", "white"),
-        ("default_text", "white", "black")
-    ]
-
-    manager = EncodingManager(all_files, parallel_encodes, frame, todo_list, active_list, completed_list)
-
-    loop = urwid.MainLoop(frame,
-            unhandled_input=quit_on_escape,
-            palette=palette)
-    loop.set_alarm_in(0.5, monitor_encoding, user_data=manager)
-    loop.run()
+    # loop and sleep
+    while not manager.encodes_done():
+        print("------")
+        manager.monitor_encoding()
+        time.sleep(0.5)
+    print("All encodes complete")
 
