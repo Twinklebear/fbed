@@ -67,9 +67,9 @@ class EncodingTask:
         # Pick bitrate based on resolution, 1080p (8Mbps), 720p (5Mbps), smaller (3Mbps)
         bitrate = 3000
         if self.height > 720:
-            bitrate = 8000
+            bitrate = 10000
         elif self.height > 480:
-            bitrate = 5000
+            bitrate = 6000
         # Don't exceed the source bitrate as our target
         if bitrate > source_bitrate:
             bitrate = source_bitrate
@@ -79,12 +79,13 @@ class EncodingTask:
             "b:v": f"{bitrate}k",
             "preset": "medium",
             "c:a": "copy",
+            "c:s": "copy",
             "progress": f"pipe:{self.pipe_write}"
         }
         self.start = datetime.datetime.now()
         in_stream = ffmpeg.input(filename)
         video = in_stream.video.filter("format", **{"pix_fmts": "yuv420p"})
-        enc = ffmpeg.output(video, in_stream.audio, self.out_filename, **encoding_args)
+        enc = ffmpeg.output(video, in_stream.audio, in_stream["s"], self.out_filename, **encoding_args)
         args = ffmpeg.compile(enc, overwrite_output=True)
         self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.stderr, pass_fds=[self.pipe_write])
         self.encode_stats = {}
@@ -261,10 +262,10 @@ if __name__ == "__main__":
                     continue
                 for f in files:
                     filename = os.path.join(path, f)
-                    out_filename = os.path.join(output_dir, os.path.splitext(os.path.relpath(filename, it))[0] + ".mp4")
+                    out_filename = os.path.join(output_dir, os.path.splitext(os.path.relpath(filename, it))[0] + ".mkv")
                     all_files.append((filename, out_filename))
         else:
-            out_filename = os.path.join(output_dir, os.path.splitext(it)[0] + ".mp4")
+            out_filename = os.path.join(output_dir, os.path.splitext(it)[0] + ".mkv")
             all_files.append((it, out_filename))
 
     parallel_encodes = 1
