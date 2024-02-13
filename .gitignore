@@ -18,3 +18,6 @@ session_list.json
 missing_items_db.xlsx
 aws.json
 vis2020_discord_archive.json
+
+venv/
+.idea/
